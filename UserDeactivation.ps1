@@ -6,7 +6,6 @@ $checkmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
         write-host "Importing Active Directory Module Now" -foreground Green
         Import-Module ActiveDirectory
     }
-
 #Check if AD User Exists.  
 
 Do {
@@ -28,7 +27,6 @@ Do {
           }
    }   
 While ($null -eq $username)
-
 #Check if OU Exists
 
 Do {
@@ -50,12 +48,9 @@ Do {
           }
    }   
 While ($null -eq $disableduserOU)
-           
 #Disable AD User Account and Check to Ensure its been disabled. 
 Disable-ADAccount -Identity $username
 $checkenabled = (Get-ADUser -Identity $username).enabled
-$checkenabled
-$username.DistinguishedName
 if ($checkenabled -match "False") 
     { 
         Write-Host "User $username has been successfully disabled!" -Foreground Green
@@ -65,7 +60,19 @@ else
         Write-Host 'User has not been disabled...NEED TO PUT IN ERROR CHECKING AND FIX.' #User should not have an issue being disabled but need to include error fixing. 
    
     }
-#Move User to Disabled Users OU
-$userGuid = $username.ObjectGUID
 
-Move-ADObject -Identity $userGuid -TargetPath $disableduserOU
+#Move User to Disabled Users OU then check if User is in Disabled User folder
+$guid = Get-ADUser -identity $username -Properties ObjectGUID | Select-Object -ExpandProperty ObjectGUID
+Move-ADObject -Identity $guid -TargetPath $disableduserOU
+    #Obtain the Folder of Current User - Check if User in OU
+    $Properties = get-aduser $username
+    $dn = $Properties.distinguishedname.substring($Properties.distinguishedname.indexof(",") + 1,$Properties.distinguishedname.Length - $Properties.distinguishedname.indexof(",") - 1)
+    $ou = ($dn.split(',')[0])
+if ($ou -match "Disabled Users") 
+{ 
+     Write-Host "User $username has been successfully moved to the Disabled Users OU!" -Foreground Green
+}
+else 
+{
+     Write-Host 'User has not been Moved...NEED TO PUT IN ERROR CHECKING AND FIX.' #User should not have an issue being disabled but need to include error fixing. 
+}
