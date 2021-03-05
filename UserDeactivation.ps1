@@ -1,10 +1,14 @@
+write-host "Installing PowerShell Active Directory Module Now..." -foreground Green
 Add-WindowsFeature RSAT-AD-PowerShell
-$checkmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
- if ( $checkmodule.Name -eq "RSAT-AD-PowerShell") 
+$checkADmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
+ if ( $checkADmodule.Name -eq "RSAT-AD-PowerShell") 
     {
         write-host "Active Directory PowerShell Module Installed Successfully!" -foreground Green
         write-host "Importing Active Directory Module Now" -foreground Green
         Import-Module ActiveDirectory
+    }
+    else{
+        write-host "AD Module did not install"
     }
 #Check if AD User Exists.  
 
@@ -76,3 +80,65 @@ else
 {
      Write-Host 'User has not been Moved...NEED TO PUT IN ERROR CHECKING AND FIX.' #User should not have an issue being disabled but need to include error fixing. 
 }
+#Get Today's date & Current Logged in User for Description
+$currentloggedinuser = (Get-WmiObject -Class Win32_Process -Filter 'Name="explorer.exe"').GetOwner().User
+$todaysdate = (Get-Date).ToString('dd/MM/yyyy')
+#Update Description
+Set-ADUser $username -Description "Deactivated on $todaysdate by $currentloggedinuser" #Need to create checking mechanism here.
+#Run AD Delta Sync
+
+#Install and Import Azure AD Module. 
+write-host "Installing PowerShell Azure Active Directory Module Now..." -foreground Green
+Install-Module -Name AzureAD -force
+$CheckAzureModule = Get-InstalledModule -Name AzureAD
+if ( $CheckAzureModule.Name -eq "AzureAD") 
+{
+    write-host "Azure Active Directory PowerShell Module Installed Successfully!" -foreground Green
+    write-host "Importing Azure Active Directory Module Now" -foreground Green
+    Import-Module AzureAD
+}
+else{
+    write-host "Azure AD Module did not install"
+}
+#Install Exchange Online Module
+write-host "Installing PowerShell Exchange Online Active Directory Module Now..." -foreground Green
+Install-Module -Name ExchangeOnlineManagement -force
+$CheckExchangeModule = Get-InstalledModule -Name ExchangeOnlineManagement
+if ( $CheckExchangeModule.Name -eq "ExchangeOnlineManagement") 
+{
+    write-host "ExchangeOnlineManagement Active Directory PowerShell Module Installed Successfully!" -foreground Green
+    write-host "Importing ExchangeOnlineManagement Module Now" -foreground Green
+    Import-Module ExchangeOnlineManagement
+    
+}
+else{
+    write-host "Azure AD Module did not install"
+}
+
+#Connect to Exchange Online 
+$O365Username = read-host 'Enter the username of the O365 Tenancy the User Belongs too' 
+
+write-host "Connecting to Exchange Online"
+Connect-ExchangeOnline -UserPrincipalName $O365Username
+Set-Mailbox $username -Type Shared
+$Checkmailboxtype = Get-Mailbox -RecipientTypeDetails SharedMailbox
+If ($Checkmailboxtype -match "charlie.brown")
+{
+    write-host "Work"
+}
+Else{
+    Write-host "broke"
+}
+
+
+
+
+
+
+# Get Admin Credential + Connect to Azure AD Module
+# $credential = Get-Credential
+# write-host "Connecting to Azure AD Now"
+# Connect-AzureAD -Credential $credential
+
+# Get-MsolUser -All -UnlicensedUsersOnly
+
