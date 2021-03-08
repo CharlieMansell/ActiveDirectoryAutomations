@@ -80,12 +80,59 @@ else
 {
      Write-Host 'User has not been Moved...NEED TO PUT IN ERROR CHECKING AND FIX.' #User should not have an issue being disabled but need to include error fixing. 
 }
+
 #Get Today's date & Current Logged in User for Description
 $currentloggedinuser = (Get-WmiObject -Class Win32_Process -Filter 'Name="explorer.exe"').GetOwner().User
 $todaysdate = (Get-Date).ToString('dd/MM/yyyy')
 #Update Description
 Set-ADUser $username -Description "Deactivated on $todaysdate by $currentloggedinuser" #Need to create checking mechanism here.
-#Run AD Delta Sync
+
+#Check if Running then Run AD Delta Sync
+Get-ADSyncScheduler
+$confirmation = Read-Host "Is there currently a Sync in Progress? (Y/N)"
+if ($confirmation -eq 'n') {
+    Start-ADSyncSyncCycle -PolicyType Init
+}
+else
+{
+    Write-Warning 'Waiting 15 Minutes for the Sync Cycle to Finish'
+    Start-Sleep -s 900
+    Write-Host 'Syncing with Office 365' -foreground Green
+    Start-ADSyncSyncCycle -PolicyType Init
+}
+
+
+#Install Exchange Online Module
+write-host "Installing PowerShell Exchange Online Active Directory Module Now..." -foreground Green
+Install-Module -Name ExchangeOnlineManagement -force
+$CheckExchangeModule = Get-InstalledModule -Name ExchangeOnlineManagement
+if ( $CheckExchangeModule.Name -eq "ExchangeOnlineManagement") 
+{
+    write-host "ExchangeOnlineManagement Active Directory PowerShell Module Installed Successfully!" -foreground Green
+    write-host "Importing ExchangeOnlineManagement Module Now" -foreground Green
+    Import-Module ExchangeOnlineManagement
+    
+}
+else{
+    write-host "ExchangeOnlineManagement AD Module did not install"
+}
+
+#Connect to Exchange Online 
+$O365Username = read-host 'Enter your O365 Admin Username' 
+
+write-host "Connecting to Exchange Online"
+Connect-ExchangeOnline -UserPrincipalName $O365Username
+Set-Mailbox $username -Type Shared
+Write-host 'Converting the users mailbox to shared'
+Start-Sleep -s 90
+$Checkmailboxtype = Get-Mailbox -RecipientTypeDetails SharedMailbox
+If ($Checkmailboxtype -match $username)
+{
+    write-host "The Mailbox of $username has been successfully converted to a shared mailbox" -foreground Green
+}
+Else{
+    Write-host "Build Resolve Here"
+}
 
 #Install and Import Azure AD Module. 
 write-host "Installing PowerShell Azure Active Directory Module Now..." -foreground Green
@@ -100,45 +147,46 @@ if ( $CheckAzureModule.Name -eq "AzureAD")
 else{
     write-host "Azure AD Module did not install"
 }
-#Install Exchange Online Module
-write-host "Installing PowerShell Exchange Online Active Directory Module Now..." -foreground Green
-Install-Module -Name ExchangeOnlineManagement -force
-$CheckExchangeModule = Get-InstalledModule -Name ExchangeOnlineManagement
-if ( $CheckExchangeModule.Name -eq "ExchangeOnlineManagement") 
-{
-    write-host "ExchangeOnlineManagement Active Directory PowerShell Module Installed Successfully!" -foreground Green
-    write-host "Importing ExchangeOnlineManagement Module Now" -foreground Green
-    Import-Module ExchangeOnlineManagement
-    
-}
-else{
-    write-host "Azure AD Module did not install"
-}
-
-#Connect to Exchange Online 
-$O365Username = read-host 'Enter the username of the O365 Tenancy the User Belongs too' 
-
-write-host "Connecting to Exchange Online"
-Connect-ExchangeOnline -UserPrincipalName $O365Username
-Set-Mailbox $username -Type Shared
-$Checkmailboxtype = Get-Mailbox -RecipientTypeDetails SharedMailbox
-If ($Checkmailboxtype -match "charlie.brown")
-{
-    write-host "Work"
-}
-Else{
-    Write-host "broke"
-}
-
-
-
-
-
 
 # Get Admin Credential + Connect to Azure AD Module
-# $credential = Get-Credential
-# write-host "Connecting to Azure AD Now"
-# Connect-AzureAD -Credential $credential
+$credential = Get-Credential
+write-host "Connecting to Azure AD Now"
+Connect-AzureAD -Credential $credential
 
-# Get-MsolUser -All -UnlicensedUsersOnly
+#Install MS Online Module
+write-host "Installing PowerShell MSOnline Active Directory Module Now..." -foreground Green
+Install-Module -Name MSOnline -force
+$CheckMSOnline = Get-InstalledModule -Name AzureAD
+if ( $CheckMSOnline.Name -eq "AzureAD") 
+{
+    write-host "MSOnline Active Directory PowerShell Module Installed Successfully!" -foreground Green
+    write-host "Importing MSOnline Active Directory Module Now" -foreground Green
+    Import-Module MSOnline
+}
+else{
+    write-host "MSOnline AD Module did not install"
+}
+
+#Connect to MS Online
+write-host 'Connecting to MS Online...'
+Connect-MsolService -Credential $credential
+
+#Get O365 Tenant Domain
+write-host 'Obtaining Domain Name'
+$domain = get-msoldomain | Where-Object {$_.Name.Split('.').Length -eq 3 -and $_.Name -like '*onmicrosoft.com'}
+$domainname = $domain.name
+
+#Get UPN of User
+write-host 'Obtaining UPN...'
+$upn = $username + "@" + $domainname
+
+#Remove all Licenses from user
+(get-MsolUser -UserPrincipalName $upn).licenses.AccountSkuId |
+ForEach-Object{
+    Set-MsolUserLicense -UserPrincipalName $upn -RemoveLicenses $_
+}
+Write-Host 'All Licenses have been removed from the user: $username' -foreground Green
+Write-Host '$username has been deactivated successfully!' -foreground Green
+
+
 
