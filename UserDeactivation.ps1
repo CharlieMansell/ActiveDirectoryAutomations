@@ -10,6 +10,7 @@ $checkADmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
     else{
         write-host "AD Module did not install"
     }
+$ticketnumber = read-host 'Enter Ticket Number'
 #Check if AD User Exists.  
 
 Do {
@@ -83,9 +84,9 @@ else
 
 #Get Today's date & Current Logged in User for Description
 $currentloggedinuser = (Get-WmiObject -Class Win32_Process -Filter 'Name="explorer.exe"').GetOwner().User
-$todaysdate = (Get-Date).ToString('dd/MM/yyyy')
+$todaysdate = (Get-Date).ToString('dd/mm/yyyy')
 #Update Description
-Set-ADUser $username -Description "Deactivated on $todaysdate by $currentloggedinuser" #Need to create checking mechanism here.
+Set-ADUser $username -Description "Deactivated on $todaysdate by $currentloggedinuser - $ticketnumber" #Need to create checking mechanism here.
 
 #Check if Running then Run AD Delta Sync
 Get-ADSyncScheduler
@@ -118,10 +119,9 @@ else{
 }
 
 #Connect to Exchange Online 
-$O365Username = read-host 'Enter your O365 Admin Username' 
-
+$credential = Get-Credential
 write-host "Connecting to Exchange Online"
-Connect-ExchangeOnline -UserPrincipalName $O365Username
+Connect-ExchangeOnline -Credential $credential
 Set-Mailbox $username -Type Shared
 Write-host 'Converting the users mailbox to shared'
 Start-Sleep -s 90
@@ -149,7 +149,6 @@ else{
 }
 
 # Get Admin Credential + Connect to Azure AD Module
-$credential = Get-Credential
 write-host "Connecting to Azure AD Now"
 Connect-AzureAD -Credential $credential
 
