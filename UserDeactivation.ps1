@@ -1,3 +1,6 @@
+#Written by Charlie Mansell - Lucidity IT
+#Script needs to be run on an Domain Controller
+#Need to know the OU + Disabled user OU Must be called "Disabled Users" or "Users Disabled"
 write-host "Installing PowerShell Active Directory Module Now..." -foreground Green
 Add-WindowsFeature RSAT-AD-PowerShell
 $checkADmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
@@ -11,18 +14,21 @@ $checkADmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
         write-host "AD Module did not install"
     }
 $ticketnumber = read-host 'Enter Ticket Number'
+$username = read-host 'Enter the username of the user you wish to disable' 
+
+
 #Check if AD User Exists.  
 
 Do {
     # Get a username from the user
     $username = read-host 'Enter the username of the user you wish to disable' 
 
-   
     Try {
             # Check if it's in AD
             $checkUsername = Get-ADUser -Identity $username -ErrorAction Stop
-            write-host "You have selected to disable the following user account: $username" -foreground Green
+            
         }
+        
     Catch {
             # Couldn't be found
             Write-Warning -Message "Could not find a user with the username: $username. Please check the spelling and try again."
@@ -30,12 +36,47 @@ Do {
             # Loop de loop (Restart)
             $username = $null
           }
-   }   
+    }    
 While ($null -eq $username)
+
+#Check if AD User is Active.
+Do {
+        $username
+
+    Try {
+        $checkintialenabled = (Get-ADUser -Identity $username).enabled
+            
+        }
+        
+    Catch {
+            # Couldn't be found
+            Write-Warning -Message "User has been disabled"
+            # Loop de loop (Restart)
+            $username = $null
+          }
+    }    
+While ($null -eq $username)
+
+#Check if the user is already disabled
+$checkintialenabled = (Get-ADUser -Identity $username).enabled
+if ($checkintialenabled -match "False") 
+    { 
+      Write-Warning "User $username is already disabled..."
+      $decision 
+      Write-Warning "Closing Script"
+      exit
+    }
+else 
+    {
+        write-host "You have selected to disable the following user account: $username" -foreground Green
+
+    }
+
+
 #Check if OU Exists
 
 Do {
-    # Get a username from the user
+    # Get OU from the user
     $disableduserOU = read-host 'Enter the OU you want to move the user too' 
 
    
@@ -62,29 +103,27 @@ if ($checkenabled -match "False")
     }
 else 
     {
-        Write-Host 'User has not been disabled...NEED TO PUT IN ERROR CHECKING AND FIX.' #User should not have an issue being disabled but need to include error fixing. 
-   
-    }
+        Write-Warning 'User can not be disabled'
 
+    }
 #Move User to Disabled Users OU then check if User is in Disabled User folder
 $guid = Get-ADUser -identity $username -Properties ObjectGUID | Select-Object -ExpandProperty ObjectGUID
 Move-ADObject -Identity $guid -TargetPath $disableduserOU
     #Obtain the Folder of Current User - Check if User in OU
     $Properties = get-aduser $username
     $dn = $Properties.distinguishedname.substring($Properties.distinguishedname.indexof(",") + 1,$Properties.distinguishedname.Length - $Properties.distinguishedname.indexof(",") - 1)
-    $ou = ($dn.split(',')[0])
-if ($ou -match "Disabled Users") 
+if ($dn -match $checkou) 
 { 
      Write-Host "User $username has been successfully moved to the Disabled Users OU!" -Foreground Green
 }
 else 
 {
-     Write-Host 'User has not been Moved...NEED TO PUT IN ERROR CHECKING AND FIX.' #User should not have an issue being disabled but need to include error fixing. 
+     Write-Host 'User has not been Moved'
 }
 
 #Get Today's date & Current Logged in User for Description
 $currentloggedinuser = (Get-WmiObject -Class Win32_Process -Filter 'Name="explorer.exe"').GetOwner().User
-$todaysdate = (Get-Date).ToString('dd/mm/yyyy')
+$todaysdate = (Get-Date).ToString('dd/MM/yyyy')
 #Update Description
 Set-ADUser $username -Description "Deactivated on $todaysdate by $currentloggedinuser - $ticketnumber" #Need to create checking mechanism here.
 
@@ -118,12 +157,28 @@ else{
     write-host "ExchangeOnlineManagement AD Module did not install"
 }
 
-#Connect to Exchange Online 
-$credential = Get-Credential
-write-host "Connecting to Exchange Online"
-Connect-ExchangeOnline -Credential $credential
+#Connect to Exchange Online + Check Credentials
+
+Do {
+    #Get Credentials 
+    $credential = Get-Credential
+    write-host "Connecting to Exchange Online" -foreground Green
+
+   #Connecting
+    try {
+        if (Connect-ExchangeOnline -Credential $credential) { 
+            Write-Host "Connected" }
+        }  
+        #Check for Error
+        catch [System.AggregateException] {
+            Write-Warning "Invalid Credentials!"
+            #Repeat if wrong
+            $credential = $null
+        }
+   }   
+While ($null -eq $credential)
+Write-host 'Converting the users mailbox to shared' -foreground Green
 Set-Mailbox $username -Type Shared
-Write-host 'Converting the users mailbox to shared'
 Start-Sleep -s 90
 $Checkmailboxtype = Get-Mailbox -RecipientTypeDetails SharedMailbox
 If ($Checkmailboxtype -match $username)
@@ -131,8 +186,29 @@ If ($Checkmailboxtype -match $username)
     write-host "The Mailbox of $username has been successfully converted to a shared mailbox" -foreground Green
 }
 Else{
-    Write-host "Build Resolve Here"
+    Write-host "Mailbox was not converted...waiting for the mailbox to be converted"
+    Start-Sleep -s 90
+    If ($Checkmailboxtype -match $username)
+    {
+        write-host "The Mailbox of $username has been successfully converted to a shared mailbox" -foreground Green  
+    }
+    else {
+        Write-host "Mailbox was not converted...waiting for the mailbox to be converted"
+        Start-Sleep -s 90
+        If ($Checkmailboxtype -match $username)
+        {
+            write-host "The Mailbox of $username has been successfully converted to a shared mailbox" -foreground Green  
+        }
+        else {
+            Write-host "Mailbox was not converted...exiting script to prevent loss of data"
+            exit
+        }
+                 
+    }
+    
 }
+#Remove Exchange Session
+if ($ExoSession) { Remove-PSSession -Session $ExoSession -ErrorAction SilentlyContinue } 
 
 #Install and Import Azure AD Module. 
 write-host "Installing PowerShell Azure Active Directory Module Now..." -foreground Green
@@ -150,7 +226,7 @@ else{
 
 # Get Admin Credential + Connect to Azure AD Module
 write-host "Connecting to Azure AD Now"
-Connect-AzureAD -Credential $credential
+Connect-AzureAD -Credential $credential 
 
 #Install MS Online Module
 write-host "Installing PowerShell MSOnline Active Directory Module Now..." -foreground Green
