@@ -12,53 +12,55 @@ $checkADmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
         write-host "AD Module did not install"
     }
 
-    $YesOrNo = Read-Host "Will a copy of the mail be required in the originating mailbox? Please enter your response (y/n)"
-    while("y","n" -notcontains $YesOrNo )
+    $YesOrNo = Read-Host "What level of mailbox permissions are required? Please enter your response ('read and manage permissions','send as permissions' or 'send on behalf of permissions')"
+
+    while("read and manage permissions","send as permissions","send on behalf of permissions" -notcontains $YesOrNo )
         {
-            $YesOrNo = Read-Host "Please enter your response (y/n)"
+            $YesOrNo = Read-Host "Please enter your response ('read and manage permissions','send as permissions' or 'send on behalf of permissions')"
         }
-#Check if Sending User Exists.  
+#Check if requires User Exists.  
 
 Do {
     # Get a username from the user
-    $originusername = read-host 'Enter the user, you wish to forward from' 
+    $assigningtomailbox = read-host 'Enter the user that requires access to the mailbox' 
 
    
     Try {
             # Check if it's in AD
-            $checkUsername = Get-ADUser -Identity $originusername -ErrorAction Stop
-            write-host "You have forward the mail in this users mailbox: $originuser" -foreground Green
+            $checkUsername = Get-ADUser -Identity $assigningtomailbox -ErrorAction Stop
+            write-host "You have selected to disable the following user account: $assigningtomailbox" -foreground Green
         }
     Catch {
             # Couldn't be found
-            Write-Warning -Message "Could not find a user with the username: $originusername. Please check the spelling and try again."
+            Write-Warning -Message "Could not find a user with the username: $assigningtomailbox. Please check the spelling and try again."
 
             # Loop de loop (Restart)
-            $originusername = $null
+            $assigningtomailbox = $null
           }
    }   
-While ($null -eq $originusername)
+While ($null -eq $assigningtomailbox)
+
 
 #Check if Receiving User Exists.  
 
 Do {
     # Get a username from the user
-    $forwardingusername = read-host 'Enter the user you wish to forward the mail too' 
+    $ = read-host 'Enter the user you wish to forward the mail too' 
 
     Try {
             # Check if it's in AD
-            $checkUsername = Get-ADUser -Identity $forwardingusername -ErrorAction Stop
-            write-host "You have selected to forward the mail to the following user account: $forwardingusername" -foreground Green
+            $checkUsername = Get-ADUser -Identity $mailboxassigningtouser -ErrorAction Stop
+            write-host "You have selected to disable the following user account: $mailboxassigningtouser" -foreground Green
         }
     Catch {
             # Couldn't be found
-            Write-Warning -Message "Could not find a user with the username: $forwardingusername. Please check the spelling and try again."
+            Write-Warning -Message "Could not find a user with the username: $mailboxassigningtouser. Please check the spelling and try again."
 
             # Loop de loop (Restart)
-            $forwardingusername = $null
+            $v = $null
           }
    }   
-While ($null -eq $forwardingusername)
+While ($null -eq $mailboxassigningtouser)
 
 #Install Exchange Online Module
 write-host "Installing PowerShell Exchange Online Active Directory Module Now..." -foreground Green
@@ -96,10 +98,15 @@ Do {
    }   
 While ($null -eq $credential)
 
-if ($YesOrNo -eq "Y" )
+if ($YesOrNo -eq "read and manage permissions")
 {
-    Set-Mailbox -Identity $originusername -DeliverToMailboxAndForward $true -ForwardingAddress $forwardingusername 
+    Add-MailboxPermission -Identity $mailboxassigningtouser -User $assigningtomailbox -AccessRights ReadPermission -InheritanceType All
 }
-else{
-    Set-Mailbox -Identity $originusername -DeliverToMailboxAndForward $false -ForwardingAddress $forwardingusername 
+if ($YesOrNo -eq "send as permissions")
+{
+    Add-RecipientPermission -Identity $mailboxassigningtouser -Trustee $assigningtomailbox -AccessRights SendAs
+}
+if ($YesOrNo -eq "send on behalf of permissions")
+{
+    Set-Mailbox -Identity $mailboxassigningtouser -GrantSendOnBehalfTo $assigningtomailbox
 }

@@ -39,23 +39,6 @@ Do {
     }    
 While ($null -eq $username)
 
-#Check if AD User is Active.
-Do {
-        $username
-
-    Try {
-        $checkintialenabled = (Get-ADUser -Identity $username).enabled
-            
-        }
-        
-    Catch {
-            # Couldn't be found
-            Write-Warning -Message "User has been disabled"
-            # Loop de loop (Restart)
-            $username = $null
-          }
-    }    
-While ($null -eq $username)
 
 #Check if the user is already disabled
 $checkintialenabled = (Get-ADUser -Identity $username).enabled
