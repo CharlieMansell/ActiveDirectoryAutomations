@@ -30,5 +30,7 @@ Function Create-Password
   # add together and return new random password
   $password = $word1 + $specialcharacter2 + $word2 + $number1 + $specialcharacter1
   $password = $password.replace(' ','')
+  $password
 
 }
+Create-Password
