@@ -11,13 +11,22 @@ $checkADmodule = Get-WindowsFeature -Name RSAT-AD-PowerShell
     else{
         write-host "AD Module did not install"
     }
+#Defining User Templates (These can be named the same across multiple clients) 
+$HRuser = "hrtemplateuser"
+
+
+
+#---Generating Username, Password + Creating User---#
+
 #Defining the username of new user
 $firstname = read-host "Input the first name of the new user"
 $lastname = read-host "Input the last name of the new user"
+$fullname = "$firstname $lastname"
 $username = "$firstname.$lastname"
 $username
 
 #Generating Random Password
+write-host "Generating User Password..." -Foreground Green
 
 # requires CSV file in same directory as script
 #--------------------------------------------------------------------------------------------------
@@ -49,12 +58,41 @@ $words = Get-Content "words.csv" | Sort-Object {Get-Random} -unique | select -fi
   # add together and return new random password
   $password = $word1 + $specialcharacter2 + $word2 + $number1 + $specialcharacter1
   $password = $password.replace(' ','')
-  $password
+  $userpassword = ConvertTo-SecureString $password -AsPlainText -Force
+  
+  #Obtain the UPN 
+
+  #Connect to MS Online
+  write-host 'Connecting to MS Online...'
+  $credential = Get-Credential
+  Connect-MsolService -Credential $credential
+
+  #Get O365 Tenant Domain
+  write-host 'Obtaining Domain Name'
+  $domain = get-msoldomain | Where-Object {$_.Name.Split('.').Length -eq 3 -and $_.Name -like '*onmicrosoft.com'}
+  $domainname = $domain.name
+  
+  #Get UPN of User
+  write-host 'Obtaining UPN...'
+  $upn = $username + "@" + $domainname
+  
+
+  #Creating user
+  $userInstance = Get-ADUser -Identity "hrtemplateuser" 
+  New-ADUser -SAMAccountName "ellenAdams"  -Instance $userInstance -DisplayName "Ellen Adams"
 
 
-write-host "New Users Password is '$password'"
+  New-ADUser -Name $fullname -GivenName $firstname -Surname $lastname -DisplayName $fullname -Email $upn -SamAccountName $username -UserPrincipalName $upn -Path "OU=Users,OU=FOOBAR,DC=FOOBAR,DC=com" -AccountPassword($userpassword) -Enabled $true
 
-$ChoosingDepartmentofUser = Read-Host "What Department does this user belong too? Please enter your response ('HR','Finance','Property Manager' or 'MORE')" #ENTER MORE HERE
+
+#---------------------------------------------------------------------------#
+
+
+
+
+
+
+$ChoosingDepartmentofUser = Read-Host "What Department does this user belong too? Please enter your response ('HR','Finance','Property Manager' or 'MORE')" -Foreground Green
 
     while("HR","Finance","Property Manager" -notcontains $ChoosingDepartmentofUser )
         {
@@ -62,8 +100,8 @@ $ChoosingDepartmentofUser = Read-Host "What Department does this user belong too
         }
 if ($ChoosingDepartmentofUser -eq 'HR')
 {
-    $CopyFromUser = Get-ADUser $HRUser -prop MemberOf
-    $CopyToUser = Get-ADUser $ -prop MemberOf
+    $CopyFromUser = Get-ADUser $HRuser -prop MemberOf
+    $CopyToUser = Get-ADUser $username -prop MemberOf
     $CopyFromUser.MemberOf | Where{$CopyToUser.MemberOf -notcontains $_} |  Add-ADGroupMember -Members $CopyToUser
 
 }
