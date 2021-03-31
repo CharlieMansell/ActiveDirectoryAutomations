@@ -68,17 +68,61 @@ $words = Get-Content "words.csv" | Sort-Object {Get-Random} -unique | select -fi
   #Connect to MS Online
   write-host 'Connecting to MS Online...'
   $credential = Get-Credential
-  Connect-MsolService -Credential $credential
+
+  #Connect to MSONLINE + Store Credentials
+Do {
+    $credential = Get-Credential
+    write-host 'Connecting to MS Online...' -foreground Green
+   #Connecting
+    try {
+        if (Connect-MsolService -Credential $credential) { 
+            Write-Host "Connected" }
+        }  
+        #Check for Error
+        catch [System.AggregateException] {
+            Write-Warning "Invalid Credentials!"
+            #Repeat if wrong
+            $credential = $null
+        }
+   }   
+While ($null -eq $credential)
+
 
   #Get O365 Tenant Domain
   write-host 'Obtaining Domain Name'
-  $domain = get-msoldomain | Where-Object {$_.Name.Split('.').Length -eq 3 -and $_.Name -like '*onmicrosoft.com'} #PULL IN Domains
+  $domain = get-msoldomain | Where-Object {$_.Name.Split('.').Length -eq 3 -and $_.Name -like '*FOOBAR.com'} #PULL IN Domainsgit ad
   $domainname = $domain.name
   
   #Get UPN of User
   write-host 'Obtaining UPN...'
   $upn = $username + "@" + $domainname
-  
+
+  #Install and Connect to Exchange Online Module
+
+  #Install Exchange Online Module
+  write-host "Installing PowerShell Exchange Online Active Directory Module Now..." -foreground Green
+  Install-Module -Name ExchangeOnlineManagement -force
+  $CheckExchangeModule = Get-InstalledModule -Name ExchangeOnlineManagement
+  if ( $CheckExchangeModule.Name -eq "ExchangeOnlineManagement") 
+  {
+      write-host "ExchangeOnlineManagement Active Directory PowerShell Module Installed Successfully!" -foreground Green
+      write-host "Importing ExchangeOnlineManagement Module Now" -foreground Green
+      Import-Module ExchangeOnlineManagement
+      
+  }
+  else{
+      write-host "ExchangeOnlineManagement AD Module did not install"
+  }
+    #Connect to Exchange Online
+    Connect-ExchangeOnline -Credential $credential
+    write-host "Connecting to Exchange Online" -foreground Green
+
+
+    Set-mailbox $username -PrimarySmtpAddress "$username@$domainname"
+
+    #Remove Exchange Session
+    if ($ExoSession) { Remove-PSSession -Session $ExoSession -ErrorAction SilentlyContinue } 
+
 
 #   New-ADUser -Name $fullname -GivenName $firstname -Surname $lastname -DisplayName $fullname -Email $upn -SamAccountName $username -UserPrincipalName $upn -Path "OU=Users,OU=FOOBAR,DC=FOOBAR,DC=com" -AccountPassword($userpassword) -Enabled $true
 
@@ -94,7 +138,7 @@ $ChoosingDepartmentofUser = Read-Host "What Department does this user belong too
 if ($ChoosingDepartmentofUser -eq 'HR')
 {
     $userInstance = Get-ADUser -Identity "hrtemplateuser" 
-    New-ADUser -Name $fullname -GivenName $firstname -Surname $lastname -DisplayName $fullname -SamAccountName $username -Email $upn -UserPrincipalName $upn -Path $ou -AccountPassword($userpassword) -Enabled $true #OU to read from the INI File.
+    New-ADUser -Name $fullname -Instance $HRuser -GivenName $firstname -Surname $lastname -DisplayName $fullname -SamAccountName $username -Email $upn -UserPrincipalName $upn -Path $ou -AccountPassword($userpassword) -Enabled $true #OU to read from the INI File.
 
 }
 if ($ChoosingDepartmentofUser -eq 'Finance')
@@ -149,6 +193,15 @@ else
     Write-Host 'Syncing with Office 365' -foreground Green
     Start-ADSyncSyncCycle -PolicyType Init
 }
-#PULL IN LICENSE TYPES FROM INI FILE ETC
-Start-Sleep -s 60
-Set-MsolUserLicense -UserPrincipalName $upn -AddLicenses "$domainname :SMB_BUSINESS_ESSENTIALS"
+#// TODO PULL IN LICENSE TYPES FROM INI FILE ETC
+
+#Confirm user sync completed
+Do {
+    "Waiting on AzureAD Sync to complete..."
+    Start-Sleep -s 20
+    $isusersetup = Get-MsolUser -UserPrincipalName $upn
+} 
+While ($isusersetup -eq $null)
+
+Set-MsolUser -UserPrincipalName $upn -UsageLocation AU
+Set-MsolUserLicense -UserPrincipalName $upn -AddLicenses "reseller-account:O365_BUSINESS_ESSENTIALS"
