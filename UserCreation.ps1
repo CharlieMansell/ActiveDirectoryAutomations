@@ -67,7 +67,6 @@ $words = Get-Content "words.csv" | Sort-Object {Get-Random} -unique | select -fi
 
   #Connect to MS Online
   write-host 'Connecting to MS Online...'
-  $credential = Get-Credential
 
   #Connect to MSONLINE + Store Credentials
 Do {
@@ -90,41 +89,14 @@ While ($null -eq $credential)
 
   #Get O365 Tenant Domain
   write-host 'Obtaining Domain Name'
-  $domain = get-msoldomain | Where-Object {$_.Name.Split('.').Length -eq 3 -and $_.Name -like '*FOOBAR.com'} #PULL IN Domainsgit ad
+  $domain = get-msoldomain | Where-Object {$_.Name.Split('.').Length -eq 3 -and $_.Name -like '*lucidityitlabs.onmicrosoft.com'} #PULL IN Domainsgit ad
   $domainname = $domain.name
+  $domainname
   
   #Get UPN of User
   write-host 'Obtaining UPN...'
   $upn = $username + "@" + $domainname
 
-  #Install and Connect to Exchange Online Module
-
-  #Install Exchange Online Module
-  write-host "Installing PowerShell Exchange Online Active Directory Module Now..." -foreground Green
-  Install-Module -Name ExchangeOnlineManagement -force
-  $CheckExchangeModule = Get-InstalledModule -Name ExchangeOnlineManagement
-  if ( $CheckExchangeModule.Name -eq "ExchangeOnlineManagement") 
-  {
-      write-host "ExchangeOnlineManagement Active Directory PowerShell Module Installed Successfully!" -foreground Green
-      write-host "Importing ExchangeOnlineManagement Module Now" -foreground Green
-      Import-Module ExchangeOnlineManagement
-      
-  }
-  else{
-      write-host "ExchangeOnlineManagement AD Module did not install"
-  }
-    #Connect to Exchange Online
-    Connect-ExchangeOnline -Credential $credential
-    write-host "Connecting to Exchange Online" -foreground Green
-
-
-    Set-mailbox $username -PrimarySmtpAddress "$username@$domainname"
-
-    #Remove Exchange Session
-    if ($ExoSession) { Remove-PSSession -Session $ExoSession -ErrorAction SilentlyContinue } 
-
-
-#   New-ADUser -Name $fullname -GivenName $firstname -Surname $lastname -DisplayName $fullname -Email $upn -SamAccountName $username -UserPrincipalName $upn -Path "OU=Users,OU=FOOBAR,DC=FOOBAR,DC=com" -AccountPassword($userpassword) -Enabled $true
 
 
 #---------------------------------------------------------------------------#
@@ -176,6 +148,7 @@ if ($ChoosingDepartmentofUser -eq 'OTHER')
     $CopyFromUser.MemberOf | Where{$CopyToUser.MemberOf -notcontains $_} |  Add-ADGroupMember -Members $CopyToUser
 
 }
+Set-ADuser $username -Add @{proxyAddresses = ("SMTP:$username@$domainname")}
 Get-ADSyncScheduler
 $YesOrNo = Read-Host "Is there currently a Sync in Progress? (Y/N)"
 while("y","n" -notcontains $YesOrNo )
